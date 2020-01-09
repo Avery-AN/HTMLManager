@@ -47,7 +47,7 @@
     "        $img[p].style.width = '100%'; \n"
     "        $img[p].style.height ='auto' \n"
     "    } \n"
-    "}</script><!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0,maximum-scale=1.0,user-scalable=NO\"/><link href=\"http://wwwbvb.bweibo.net/css/web_view.css?20181108123236\"></script></head><body><p>文章开始</p> \n"
+    "}</script><!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0,maximum-scale=1.0,user-scalable=NO\"/></script></head><body><p>文章开始</p> \n"
     "<p>最近，“区块链”的热度居高不下，但一些地方出现“虚火过旺”，比如有人怀着暴富心态花式蹭热点，借区块链大肆炒作；有人直接宣扬“炒币获得官方支持”，热炒空气币等。区块链不是炒作的“噱头”、行骗的“招牌”，也绝不等于数字货币。\n人民日报发表评论称，区块链的出现虽与虚拟货币有着千丝万缕的关系，但区块链并不能与虚拟货币画等号，虚拟货币更不是区块链应用的全部。一些人故意混淆“币”“链”概念，与虚拟货币相关的炒作花样翻新、投机盛行，价格暴涨暴跌的背后风险快速聚集。即使是最具代表性的虚拟货币“比特币”，也不是哪国的法定流通货币，本质仍是一种投资风险极高的虚拟商品。看上去很美的风口，很可能又是陷阱罢了。\n任何创新都应以合法合规为前提。占据区块链技术制高点，亦没有捷径可走。目前，区块链技术应用已延伸到数字金融、物联网、智能制造等领域。</p> \n"
     "<p style=\"text-align:center;\"><img src=\"https://upload-images.jianshu.io/upload_images/17788728-c70af7cb2d08d901.jpg\" /></p> \n"
     "<p style=\"text-align:center;\"><img src=\"https://upload-images.jianshu.io/upload_images/14892748-590eb681e5adfa96\" /></p>  \n"
@@ -70,8 +70,12 @@
     HtmlManager *htmlManager = [HtmlManager new];
     self.htmlManager = htmlManager;
     self.html = [htmlManager appendLocalCssStytle:self.html];
-    self.html = [htmlManager processImagesInHtml:self.html webView:self.webView];
-    [self.webView loadHTMLString:self.html baseURL:nil];
+    [htmlManager processImagesInHtml:self.html
+                             webView:self.webView
+                          completion:^(NSString * _Nullable _html, NSArray * _Nullable imageUrls) {
+        self.html = _html;
+        [self.webView loadHTMLString:self.html baseURL:nil];
+    }];
 }
 
 

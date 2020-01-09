@@ -13,7 +13,7 @@
 static NSString *regexString_image = @"<img\\b[^<>]*?\\bsrc[\\s\\t\\r\\n]*=[\\s\\t\\r\\n]*[""']?[\\s\\t\\r\\n]*(?<imgUrl>[^\\s\\t\\r\\n""'<>]*)[^<>]*?/?[\\s\\t\\r\\n]*>";
 
 @interface HtmlManager ()
-@property (nonatomic) NSMutableArray *downloadImages;
+@property (nonatomic) NSMutableArray *updateImagesJS;
 @property (nonatomic, unsafe_unretained) WKWebView *webView;
 @end
 
@@ -26,107 +26,114 @@ static NSString *regexString_image = @"<img\\b[^<>]*?\\bsrc[\\s\\t\\r\\n]*=[\\s\
 
 
 #pragma mark - Publiac Api -
-- (NSString *)processImagesInHtml:(NSString *)html_
-                          webView:(WKWebView *)webView {
+- (void)processImagesInHtml:(NSString *)html_
+                    webView:(WKWebView *)webView
+                 completion:(ProcessImagesCompletion)completion {
     self.webView = webView;
     __block NSString *html = html_;
+    NSMutableArray *allUrls = [NSMutableArray arrayWithCapacity:0];
     
-    @autoreleasepool {
-        __autoreleasing NSMutableDictionary *urlDicts = [NSMutableDictionary dictionary];
-        NSMutableArray *allUrls = [NSMutableArray arrayWithCapacity:0];
-        NSString *cachesDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
-        
-        /**
-         // 获取沙盒主目录路径:
-         NSString *homeDir = NSHomeDirectory();
-         // 获取Documents目录路径:
-         NSString *docDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-         // 获取Library的目录路径:
-         NSString *libDir = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) lastObject];
-         // 获取Caches目录路径:
-         NSString *cachesDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
-         // 获取tmp目录路径:
-         NSString *tmpDir = NSTemporaryDirectory();
-         */
-        
-        // 匹配image标签的正则表达式:
-        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:regexString_image options:NSRegularExpressionAllowCommentsAndWhitespace error:nil];
-        NSArray *result = [regex matchesInString:html_ options:NSMatchingReportCompletion range:NSMakeRange(0, html_.length)];
-        for (NSTextCheckingResult *item in result) {
-            NSString *imageHtml = [html_ substringWithRange:item.range];
-            NSLog(@"imageHtml: %@",imageHtml);
-            NSRange range = [imageHtml rangeOfString:@"http"];
-            NSString *imageUrlString = [imageHtml substringFromIndex:range.location];
-            range = [imageUrlString rangeOfString:@"\" />"];
-            if (range.location != NSNotFound) {
-                imageUrlString = [imageUrlString substringToIndex:range.location];
-            }
-            else {
-                range = [imageUrlString rangeOfString:@"\"/>"];
-                imageUrlString = [imageUrlString substringToIndex:range.location];
-            }
-            NSLog(@"imageUrlString: %@",imageUrlString);
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        @autoreleasepool {
+            __autoreleasing NSMutableDictionary *urlDicts = [NSMutableDictionary dictionary];
+            NSString *cachesDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
             
-            if (imageUrlString.length > 0) {
-                // 先将链接取个本地名字,且获取完整路径:
-                NSString *localPath = [cachesDir stringByAppendingPathComponent:[self md5:imageUrlString]];
-                [urlDicts setObject:localPath forKey:imageUrlString];
-                [allUrls addObject:imageUrlString];
-            }
-        }
-        
-        // 添加监听:
-        [webView addObserver:self forKeyPath:NSStringFromSelector(@selector(estimatedProgress)) options:NSKeyValueObservingOptionNew |  NSKeyValueObservingOptionOld context:NULL];
-        
-        // 遍历所有的URL,替换成本地的URL,并异步获取图片:
-        for (int i = 0; i < allUrls.count; i++) {
-            NSString *imageUrlString = [allUrls objectAtIndex:i];
-            NSString *localPath = [urlDicts objectForKey:imageUrlString];
+            /**
+             // 获取沙盒主目录路径:
+             NSString *homeDir = NSHomeDirectory();
+             // 获取Documents目录路径:
+             NSString *docDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+             // 获取Library的目录路径:
+             NSString *libDir = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) lastObject];
+             // 获取Caches目录路径:
+             NSString *cachesDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
+             // 获取tmp目录路径:
+             NSString *tmpDir = NSTemporaryDirectory();
+             */
             
-            // 如果已经缓存过,就不需要重复加载了:
-            if (![[NSFileManager defaultManager] fileExistsAtPath:localPath]) {
-                // 全部替换为默认图片
-                UIImage *defaultImage = [UIImage imageNamed:@"默认图"];  // 默认图片
-                NSString *imageSource = [self htmlForJPGImage:defaultImage];
-                html = [html stringByReplacingOccurrencesOfString:imageUrlString withString:imageSource]; // 全局替换imageUrlString
+            // 匹配image标签的正则表达式:
+            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:regexString_image options:NSRegularExpressionAllowCommentsAndWhitespace error:nil];
+            NSArray *result = [regex matchesInString:html_ options:NSMatchingReportCompletion range:NSMakeRange(0, html_.length)];
+            for (NSTextCheckingResult *item in result) {
+                NSString *imageHtml = [html_ substringWithRange:item.range];
+                // NSLog(@"imageHtml: %@",imageHtml);
+                NSRange range = [imageHtml rangeOfString:@"http"];
+                NSString *imageUrlString = [imageHtml substringFromIndex:range.location];
+                range = [imageUrlString rangeOfString:@"\" />"];
+                if (range.location != NSNotFound) {
+                    imageUrlString = [imageUrlString substringToIndex:range.location];
+                }
+                else {
+                    range = [imageUrlString rangeOfString:@"\"/>"];
+                    imageUrlString = [imageUrlString substringToIndex:range.location];
+                }
+                // NSLog(@"imageUrlString: %@",imageUrlString);
                 
-                // 异步下载:
-                [self downloadImageWithUrl:imageUrlString completion:^(UIImage * _Nonnull image) {
-                    if (image) {
-                        NSString *imageSource = [self htmlForJPGImage:image]; // 把图片进行base64编码
-                        html = [html stringByReplacingOccurrencesOfString:localPath withString:imageSource]; // 全局替换imageUrlString
-                        NSInteger position = [allUrls indexOfObject:imageUrlString];
-                        NSString *strJS = [NSString stringWithFormat:@"document.images[%ld].src='%@'", position, imageSource];
-                        
-                        if (webView && webView.estimatedProgress - 1 == 0) {
-                            // 需要webView完成FinishLoad之后才可以调用该方法:
-                            [webView evaluateJavaScript:strJS completionHandler:^(id _Nullable response, NSError * _Nullable error) {
-                                NSLog(@"webView response: %@ error: %@", response, error);
-                            }];
+                if (imageUrlString.length > 0) {
+                    // 先将链接取个本地名字,且获取完整路径:
+                    NSString *localPath = [cachesDir stringByAppendingPathComponent:[self md5:imageUrlString]];
+                    [urlDicts setObject:localPath forKey:imageUrlString];
+                    [allUrls addObject:imageUrlString];
+                }
+            }
+            
+            // 添加监听:
+            [webView addObserver:self forKeyPath:NSStringFromSelector(@selector(estimatedProgress)) options:NSKeyValueObservingOptionNew |  NSKeyValueObservingOptionOld context:NULL];
+            
+            // 遍历所有的URL,替换成本地的URL,并异步获取图片:
+            for (int i = 0; i < allUrls.count; i++) {
+                NSString *imageUrlString = [allUrls objectAtIndex:i];
+                NSString *localPath = [urlDicts objectForKey:imageUrlString];
+                
+                // 如果已经缓存过,就不需要重复加载了:
+                if (![[NSFileManager defaultManager] fileExistsAtPath:localPath]) {
+                    // 全部替换为默认图片
+                    UIImage *defaultImage = [UIImage imageNamed:@"默认图"];  // 默认图片
+                    NSString *imageSource = [self htmlForJPGImage:defaultImage];
+                    html = [html stringByReplacingOccurrencesOfString:imageUrlString withString:imageSource]; // 全局替换imageUrlString
+                    
+                    // 异步下载:
+                    [self downloadImageWithUrl:imageUrlString completion:^(UIImage * _Nonnull image) {
+                        if (image) {
+                            NSString *imageSource = [self htmlForJPGImage:image]; // 把图片进行base64编码
+                            html = [html stringByReplacingOccurrencesOfString:localPath withString:imageSource]; // 全局替换imageUrlString
+                            NSInteger position = [allUrls indexOfObject:imageUrlString];
+                            NSString *updateImageJS = [NSString stringWithFormat:@"document.images[%ld].src='%@'", position, imageSource];
+                            
+                            if (webView && webView.estimatedProgress - 1 == 0) {
+                                // 需要webView完成FinishLoad之后才可以调用该方法:
+                                [webView evaluateJavaScript:updateImageJS completionHandler:^(id _Nullable response, NSError * _Nullable error) {
+                                    // NSLog(@"webView response: %@ error: %@", response, error);
+                                }];
+                            }
+                            else {
+                                if (!self.updateImagesJS) {
+                                    self.updateImagesJS = [NSMutableArray arrayWithCapacity:0];
+                                }
+                                [self.updateImagesJS addObject:[NSDictionary dictionaryWithObjectsAndKeys:updateImageJS, @"updateImagesJS", nil]];
+                            }
                         }
                         else {
-                            if (!self.downloadImages) {
-                                self.downloadImages = [NSMutableArray arrayWithCapacity:0];
-                            }
-                            [self.downloadImages addObject:[NSDictionary dictionaryWithObjectsAndKeys:strJS, @"JS", nil]];
+                            /*
+                             在这里显示加载失败的image
+                             */
                         }
-                    }
-                    else {
-                        /*
-                         在这里显示加载失败的image
-                         */
-                    }
-                }];
-            }
-            else {
-                UIImage *_image = [UIImage imageWithContentsOfFile:localPath]; // 根据本地路径获取图片
-                NSString *imageSource = [self htmlForJPGImage:_image];  // 把图片进行base64编码
-                html = [html stringByReplacingOccurrencesOfString:localPath withString:imageSource]; // 全局替换imageUrlString
+                    }];
+                }
+                else {
+                    UIImage *_image = [UIImage imageWithContentsOfFile:localPath]; // 根据本地路径获取图片
+                    NSString *imageSource = [self htmlForJPGImage:_image];  // 把图片进行base64编码
+                    html = [html stringByReplacingOccurrencesOfString:localPath withString:imageSource]; // 全局替换imageUrlString
+                }
             }
         }
-    }
-    
-    return html;
+        
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(html, allUrls);
+            });
+        }
+    });
 }
 
 - (NSString *)appendLocalCssStytle:(NSString *)html_ {
@@ -211,7 +218,7 @@ static NSString *regexString_image = @"<img\\b[^<>]*?\\bsrc[\\s\\t\\r\\n]*=[\\s\
                                                                  [self saveImage:image imagePath:imageUrlString];
                                                              }
                                                              else {
-                                                                 NSLog(@"   下载图片失败: %@",imageUrlString);
+                                                                 // NSLog(@"   下载图片失败: %@",imageUrlString);
                                                              }
                                                              
                                                              if (completionBlock) {
@@ -248,13 +255,13 @@ static NSString *regexString_image = @"<img\\b[^<>]*?\\bsrc[\\s\\t\\r\\n]*=[\\s\
                        context:(void *)context {
     if([keyPath isEqualToString:NSStringFromSelector(@selector(estimatedProgress))]) {
         float estimatedProgress = [[change valueForKey:NSKeyValueChangeNewKey] floatValue];
-        NSLog(@"estimatedProgress: %f",estimatedProgress);
+        // NSLog(@"estimatedProgress: %f",estimatedProgress);
         if (estimatedProgress - 1 == 0) {
-            for (NSDictionary *dic in self.downloadImages) {
-                NSString *strJS = [dic valueForKey:@"JS"];
+            for (NSDictionary *dic in self.updateImagesJS) {
+                NSString *strJS = [dic valueForKey:@"updateImagesJS"];
                 if (self.webView) {
                     [self.webView evaluateJavaScript:strJS completionHandler:^(id _Nullable response, NSError * _Nullable error) {
-                        NSLog(@"webView response: %@ error: %@", response, error);
+                        // NSLog(@"webView response: %@ error: %@", response, error);
                     }];
                 }
             }

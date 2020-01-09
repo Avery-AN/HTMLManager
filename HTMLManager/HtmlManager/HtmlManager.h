@@ -10,13 +10,15 @@
 #import <WebKit/WebKit.h>
 
 typedef void (^DownloadCompletion) (UIImage * _Nullable _image);
+typedef void (^ProcessImagesCompletion) (NSString * _Nullable _html, NSArray * _Nullable imageUrls);
 
 NS_ASSUME_NONNULL_BEGIN
 
 @interface HtmlManager : NSObject
 
-- (NSString *)processImagesInHtml:(NSString *)html_
-                          webView:(WKWebView *)webView;
+- (void)processImagesInHtml:(NSString *)html_
+                    webView:(WKWebView *)webView
+                 completion:(ProcessImagesCompletion)completion;
 
 - (NSString *)appendLocalCssStytle:(NSString *)html_;
 
